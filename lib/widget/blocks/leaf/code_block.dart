@@ -171,6 +171,31 @@ class PreConfig implements LeafConfig {
         theme: a11yDarkTheme,
       );
 
+  /// Adjust font size for all theme elements and text style
+  PreConfig withFontSize(double fontSize) {
+    final adjustedTheme = <String, TextStyle>{};
+    theme.forEach((key, style) {
+      adjustedTheme[key] = style.copyWith(fontSize: fontSize);
+    });
+    
+    return copy(
+      textStyle: textStyle.copyWith(fontSize: fontSize),
+      styleNotMatched: styleNotMatched?.copyWith(fontSize: fontSize) ?? 
+                      TextStyle(fontSize: fontSize),
+      theme: adjustedTheme,
+    );
+  }
+
+  /// Disable font size in theme elements to prevent conflicts
+  PreConfig withThemeFontSizeDisabled() {
+    final adjustedTheme = <String, TextStyle>{};
+    theme.forEach((key, style) {
+      adjustedTheme[key] = style.copyWith(fontSize: null);
+    });
+    
+    return copy(theme: adjustedTheme);
+  }
+
   ///copy by other params
   PreConfig copy({
     EdgeInsetsGeometry? padding,

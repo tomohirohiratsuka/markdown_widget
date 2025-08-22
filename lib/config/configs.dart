@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import '../widget/all.dart';
 
 abstract class WidgetConfig {
@@ -15,9 +16,61 @@ abstract class InlineConfig implements WidgetConfig {}
 abstract class ContainerConfig implements BlockConfig {}
 
 //the leaf block config interface
-abstract class LeafConfig implements BlockConfig {}
+abstract class LeafConfig implements WidgetConfig {}
 
 typedef ValueCallback<T> = void Function(T value);
+
+/// Font size scale configuration for headings
+class FontSizeScale {
+  final double h1Scale;
+  final double h2Scale;
+  final double h3Scale;
+  final double h4Scale;
+  final double h5Scale;
+  final double h6Scale;
+  
+  const FontSizeScale({
+    this.h1Scale = 2.0,  // 2x base font size
+    this.h2Scale = 1.5,
+    this.h3Scale = 1.25,
+    this.h4Scale = 1.0,
+    this.h5Scale = 0.875,
+    this.h6Scale = 0.75,
+  });
+  
+  static const defaultScale = FontSizeScale();
+}
+
+/// Theme factory methods for code highlighting
+class CodeTheme {
+  /// Create a theme with consistent font size
+  static Map<String, TextStyle> createTheme({
+    required Map<String, Color> colors,
+    double? fontSize,
+    bool inheritFontSize = true,
+  }) {
+    final theme = <String, TextStyle>{};
+    colors.forEach((key, color) {
+      theme[key] = TextStyle(
+        color: color,
+        fontSize: inheritFontSize ? fontSize : null,
+      );
+    });
+    return theme;
+  }
+  
+  /// Adjust font size for an existing theme
+  static Map<String, TextStyle> adjustFontSize(
+    Map<String, TextStyle> theme,
+    double fontSize,
+  ) {
+    final adjusted = <String, TextStyle>{};
+    theme.forEach((key, style) {
+      adjusted[key] = style.copyWith(fontSize: fontSize);
+    });
+    return adjusted;
+  }
+}
 
 ///the tags of markdown, see [https://spec.commonmark.org/0.30/]
 enum MarkdownTag {
@@ -155,6 +208,12 @@ class MarkdownConfig {
     return config as T;
   }
 
+  /// Global font size setting
+  final double? globalFontSize;
+  
+  /// Font size scale configuration
+  final FontSizeScale? fontSizeScale;
+
   ///default [MarkdownConfig] for [MarkdownWidget]
   static MarkdownConfig get defaultConfig => MarkdownConfig();
 
@@ -173,19 +232,133 @@ class MarkdownConfig {
         BlockquoteConfig.darkConfig,
       ]);
 
+  /// Convenient constructor for setting global font size
+  static MarkdownConfig withFontSize(double fontSize) {
+    return MarkdownConfig(globalFontSize: fontSize);
+  }
+
+  /// Convenient constructor for mobile devices
+  static MarkdownConfig forMobile() {
+    return MarkdownConfig(
+      globalFontSize: 14.0,
+      fontSizeScale: FontSizeScale(
+        h1Scale: 1.6,
+        h2Scale: 1.3,
+        h3Scale: 1.1,
+      ),
+    );
+  }
+
+  /// Convenient constructor for desktop devices
+  static MarkdownConfig forDesktop() {
+    return MarkdownConfig(
+      globalFontSize: 16.0,
+      fontSizeScale: FontSizeScale.defaultScale,
+    );
+  }
+
   ///the key of [_tag2Config] is tag, the value is [WidgetConfig]
   final Map<String, WidgetConfig> _tag2Config = {};
 
-  MarkdownConfig({List<WidgetConfig> configs = const []}) {
+  MarkdownConfig({
+    List<WidgetConfig> configs = const [],
+    this.globalFontSize,
+    this.fontSizeScale,
+  }) {
     for (final config in configs) {
       _tag2Config[config.tag] = config;
     }
+    
+    // Apply global font size if specified
+    if (globalFontSize != null) {
+      _applyGlobalFontSize(globalFontSize!);
+    }
+  }
+
+  /// Apply global font size to all configurations
+  void _applyGlobalFontSize(double fontSize) {
+    final scale = fontSizeScale ?? FontSizeScale.defaultScale;
+    
+    // Update existing configs with new font sizes
+    final updatedConfigs = <WidgetConfig>[];
+    
+    for (final config in _tag2Config.values) {
+      if (config is PreConfig) {
+        updatedConfigs.add(config.withFontSize(fontSize));
+      } else if (config is PConfig) {
+        updatedConfigs.add(PConfig(
+          textStyle: config.textStyle.copyWith(fontSize: fontSize)
+        ));
+      } else if (config is CodeConfig) {
+        updatedConfigs.add(CodeConfig(
+          style: config.style.copyWith(fontSize: fontSize)
+        ));
+      } else if (config is LinkConfig) {
+        updatedConfigs.add(LinkConfig(
+          style: config.style.copyWith(fontSize: fontSize)
+        ));
+      } else if (config is HeadingConfig) {
+        // Apply relative scaling for headings
+        final headingConfig = _adjustHeadingFontSize(config, fontSize, scale);
+        updatedConfigs.add(headingConfig);
+      } else {
+        updatedConfigs.add(config);
+      }
+    }
+    
+    // Clear and rebuild the config map
+    _tag2Config.clear();
+    for (final config in updatedConfigs) {
+      _tag2Config[config.tag] = config;
+    }
+  }
+
+  /// Adjust heading font size based on scale
+  WidgetConfig _adjustHeadingFontSize(HeadingConfig config, double baseFontSize, FontSizeScale scale) {
+    double headingFontSize;
+    
+    if (config is H1Config) {
+      headingFontSize = baseFontSize * scale.h1Scale;
+    } else if (config is H2Config) {
+      headingFontSize = baseFontSize * scale.h2Scale;
+    } else if (config is H3Config) {
+      headingFontSize = baseFontSize * scale.h3Scale;
+    } else if (config is H4Config) {
+      headingFontSize = baseFontSize * scale.h4Scale;
+    } else if (config is H5Config) {
+      headingFontSize = baseFontSize * scale.h5Scale;
+    } else if (config is H6Config) {
+      headingFontSize = baseFontSize * scale.h6Scale;
+    } else {
+      headingFontSize = baseFontSize;
+    }
+    
+    // Create new config with adjusted font size
+    if (config is H1Config) {
+      return H1Config(style: config.style.copyWith(fontSize: headingFontSize));
+    } else if (config is H2Config) {
+      return H2Config(style: config.style.copyWith(fontSize: headingFontSize));
+    } else if (config is H3Config) {
+      return H3Config(style: config.style.copyWith(fontSize: headingFontSize));
+    } else if (config is H4Config) {
+      return H4Config(style: config.style.copyWith(fontSize: headingFontSize));
+    } else if (config is H5Config) {
+      return H5Config(style: config.style.copyWith(fontSize: headingFontSize));
+    } else if (config is H6Config) {
+      return H6Config(style: config.style.copyWith(fontSize: headingFontSize));
+    }
+    
+    return config;
   }
 
   MarkdownConfig copy({List<WidgetConfig> configs = const []}) {
     for (final config in configs) {
       _tag2Config[config.tag] = config;
     }
-    return MarkdownConfig(configs: _tag2Config.values.toList());
+    return MarkdownConfig(
+      configs: _tag2Config.values.toList(),
+      globalFontSize: globalFontSize,
+      fontSizeScale: fontSizeScale,
+    );
   }
 }
